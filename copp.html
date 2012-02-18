@@ -1,0 +1,671 @@
+<?xml version="1.0" encoding="iso-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+               "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+lang="en" xml:lang="en">
+<head>
+<title>Context Oriented Programming Patterns</title>
+<meta http-equiv="Content-Type" content="text/html;charset=iso-8859-1"/>
+<meta name="generator" content="Org-mode"/>
+<meta name="generated" content="2012-02-18 02:09:50 CET"/>
+<meta name="author" content="Aad Versteden"/>
+<meta name="description" content=""/>
+<meta name="keywords" content=""/>
+<style type="text/css">
+ <!--/*--><![CDATA[/*><!--*/
+  html { font-family: Times, serif; font-size: 12pt; }
+  .title  { text-align: center; }
+  .todo   { color: red; }
+  .done   { color: green; }
+  .tag    { background-color: #add8e6; font-weight:normal }
+  .target { }
+  .timestamp { color: #bebebe; }
+  .timestamp-kwd { color: #5f9ea0; }
+  .right  {margin-left:auto; margin-right:0px;  text-align:right;}
+  .left   {margin-left:0px;  margin-right:auto; text-align:left;}
+  .center {margin-left:auto; margin-right:auto; text-align:center;}
+  p.verse { margin-left: 3% }
+  pre {
+	border: 1pt solid #AEBDCC;
+	background-color: #F3F5F7;
+	padding: 5pt;
+	font-family: courier, monospace;
+        font-size: 90%;
+        overflow:auto;
+  }
+  table { border-collapse: collapse; }
+  td, th { vertical-align: top;  }
+  th.right  { text-align:center;  }
+  th.left   { text-align:center;   }
+  th.center { text-align:center; }
+  td.right  { text-align:right;  }
+  td.left   { text-align:left;   }
+  td.center { text-align:center; }
+  dt { font-weight: bold; }
+  div.figure { padding: 0.5em; }
+  div.figure p { text-align: center; }
+  div.inlinetask {
+    padding:10px;
+    border:2px solid gray;
+    margin:10px;
+    background: #ffffcc;
+  }
+  textarea { overflow-x: auto; }
+  .linenr { font-size:smaller }
+  .code-highlighted {background-color:#ffff00;}
+  .org-info-js_info-navigation { border-style:none; }
+  #org-info-js_console-label { font-size:10px; font-weight:bold;
+                               white-space:nowrap; }
+  .org-info-js_search-highlight {background-color:#ffff00; color:#000000;
+                                 font-weight:bold; }
+  /*]]>*/-->
+</style>
+<script type="text/javascript">
+<!--/*--><![CDATA[/*><!--*/
+ function CodeHighlightOn(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(null != target) {
+     elem.cacheClassElem = elem.className;
+     elem.cacheClassTarget = target.className;
+     target.className = "code-highlighted";
+     elem.className   = "code-highlighted";
+   }
+ }
+ function CodeHighlightOff(elem, id)
+ {
+   var target = document.getElementById(id);
+   if(elem.cacheClassElem)
+     elem.className = elem.cacheClassElem;
+   if(elem.cacheClassTarget)
+     target.className = elem.cacheClassTarget;
+ }
+/*]]>*///-->
+</script>
+
+</head>
+<body>
+
+<div id="preamble">
+
+</div>
+
+<div id="content">
+<h1 class="title">Context Oriented Programming Patterns</h1>
+
+
+<p>
+context oriented programming is similar to aspect oriented programming.  it changes the way in which applications can be built.  many constructions which were previously complex or ugly, could now become trivial to implement.  i decided to write down the experiences i have whilst learning ContxtL in the form of reusable patterns because information about using ContextL seems to be sparse.
+</p>
+
+
+<div id="table-of-contents">
+<h2>Table of Contents</h2>
+<div id="text-table-of-contents">
+<ul>
+<li><a href="#sec-1">1 preamble </a>
+<ul>
+<li><a href="#sec-1-1">1.1 libraries </a></li>
+<li><a href="#sec-1-2">1.2 supporting code </a>
+<ul>
+<li><a href="#sec-1-2-1">1.2.1 operating on multiple layers </a></li>
+</ul></li>
+</ul>
+</li>
+<li><a href="#sec-2">2 backlinks</a>
+<ul>
+<li><a href="#sec-2-1">2.1 data definition </a></li>
+<li><a href="#sec-2-2">2.2 removing the parent of a node </a></li>
+<li><a href="#sec-2-3">2.3 setting the parent of a node </a></li>
+<li><a href="#sec-2-4">2.4 updating the children of a node </a></li>
+<li><a href="#sec-2-5">2.5 conclusion </a></li>
+</ul>
+</li>
+<li><a href="#sec-3">3 depending on other layers</a>
+<ul>
+<li><a href="#sec-3-1">3.1 example: enable and warn </a></li>
+<li><a href="#sec-3-2">3.2 example: enable and warn 2 </a></li>
+<li><a href="#sec-3-3">3.3 general approach </a>
+<ul>
+<li><a href="#sec-3-3-1">3.3.1 implementing the metaclass </a></li>
+<li><a href="#sec-3-3-2">3.3.2 example use </a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+
+<div id="outline-container-1" class="outline-2">
+<h2 id="sec-1"><span class="section-number-2">1</span> preamble </h2>
+<div class="outline-text-2" id="text-1">
+
+<p>describes needed libraries and some minor support code
+</p>
+
+</div>
+
+<div id="outline-container-1-1" class="outline-3">
+<h3 id="sec-1-1"><span class="section-number-3">1.1</span> libraries </h3>
+<div class="outline-text-3" id="text-1-1">
+
+<p>so far, this document doesn't export any code to lisp files.  if you'd want to run it, you should assume the following libraries are included in the package in which you evaluate the code:
+</p><ul>
+<li>ContextL
+</li>
+<li>alexandria
+</li>
+</ul>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-1-2" class="outline-3">
+<h3 id="sec-1-2"><span class="section-number-3">1.2</span> supporting code </h3>
+<div class="outline-text-3" id="text-1-2">
+
+<p>the following functions are used throughout the code as simple helper functions.
+</p>
+
+</div>
+
+<div id="outline-container-1-2-1" class="outline-4">
+<h4 id="sec-1-2-1"><span class="section-number-4">1.2.1</span> operating on multiple layers </h4>
+<div class="outline-text-4" id="text-1-2-1">
+
+<p>adjoin-layer and remove-layer operate on a single layer.  in some cases we want to operate on a list of layers.  this is handled by the following functions.
+</p>
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">defun</span> <span style="color: #2075c7;">adjoin-layers</span> (layers active-layers)
+  (reduce #'adjoin-layer layers
+          <span style="color: #728a05;">:initial-value</span> active-layers
+          <span style="color: #728a05;">:from-end</span> t))
+
+(<span style="color: #728a05;">defun</span> <span style="color: #2075c7;">remove-layers</span> (layers active-layers)
+  (reduce #'remove-layer layers
+          <span style="color: #728a05;">:initial-value</span> active-layers
+          <span style="color: #728a05;">:from-end</span> t))
+</pre>
+
+
+</div>
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-2" class="outline-2">
+<h2 id="sec-2"><span class="section-number-2">2</span> backlinks &nbsp;&nbsp;&nbsp;<span class="tag"><span class="pattern">pattern</span></span></h2>
+<div class="outline-text-2" id="text-2">
+
+<p>under backlinks we understand the concept in which an instance links to another instance, and in which the other instance links back.  when one instance is updated, the other instance should be updated as well.  we can model this with contexts as follows:
+</p><ul>
+<li>create functions to update the normal link of the object
+</li>
+<li>create a layer for managing the backlinks
+</li>
+<li>augment the methods for managing links in the new layer, with code which updates the previous and new links.
+</li>
+</ul>
+
+
+<p>
+it's generally good to implement the lowest level at which the changes can occur.  for instance: it may be more interesting to extend slot-makunbound, than a custom method which turns out to call that method.
+</p>
+<p>
+as an example, we implement a doubly linked tree.  the doubly linked tree is a tree in which the parent knows its children and vice versa.  the doubly linked tree guarentees that the relationship always is in sync.
+</p>
+
+</div>
+
+<div id="outline-container-2-1" class="outline-3">
+<h3 id="sec-2-1"><span class="section-number-3">2.1</span> data definition </h3>
+<div class="outline-text-3" id="text-2-1">
+
+<p>we create a new layer named consistent tree which ensures the tree stays in a consistent state and we implement a new layered class which contains slots for the parent and children relationships.  we assume a node has no parent when the parent is unbound.  we assume a node has no children when children is nil.  with this structure we can both look at how accessors can be extended, as look at how primitive methods like slot-makunbound can be overridden.
+</p>
+
+
+
+<pre class="src src-lisp">(deflayer consistent-tree)
+
+(<span style="color: #728a05;">define-layered-class</span> node
+  ()
+  ((parent <span style="color: #728a05;">:layered-accessor</span> parent)
+   (children <span style="color: #728a05;">:layered-accessor</span> children <span style="color: #728a05;">:initform</span> nil)))
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-2" class="outline-3">
+<h3 id="sec-2-2"><span class="section-number-3">2.2</span> removing the parent of a node </h3>
+<div class="outline-text-3" id="text-2-2">
+
+<p>removing a parent is handled by unbinding the parent.  as the class 'node is a layered class, we can extend the layered method slot-makunbound-using-layer.  when our parent is removed, we must remove ourselves from the list of children of our parent.  this removal must be done outside of our current layer, so as to ensure no other methods of our consistency-ensuring layer are being called.
+</p>
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">define-layered-method</span> slot-makunbound-using-layer
+  <span style="color: #728a05;">:in-layer</span> consistent-tree
+  <span style="color: #728a05;">:before</span> (class (node node) (slot (eql 'parent)) writer)
+  (<span style="color: #728a05;">when</span> (slot-boundp node 'parent)
+    (<span style="color: #728a05;">with-inactive-layers</span> (consistent-tree)
+      (setf (children (parent node))
+            (remove node (children (parent node)))))))
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-3" class="outline-3">
+<h3 id="sec-2-3"><span class="section-number-3">2.3</span> setting the parent of a node </h3>
+<div class="outline-text-3" id="text-2-3">
+
+<p>for setting the parent, we must firstly ensure that our possibly existing previous parent doesn't contain a link to us anymore.  secondly, we must make sure our new parent has us as a child.
+</p>
+<p>
+we can first unset our parent and then set the new parent.  unsetting is done by unbinding the slot, which we must do in the consistent-tree layer to ensure that our previous parent doesn't know us anymore.  this will call slot-makunbound-using-layer which we've just implemented.  the next step is assigning the new parent.  setting the parent slot itself is done by the next method, however we must still ensure that our new parent knows us.  we manually add ourselves to its children.  again, as we're manually fixing things here, we disable the consistent-tree layer.
+</p>
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">define-layered-method</span> (setf parent)
+  <span style="color: #728a05;">:in-layer</span> consistent-tree
+  <span style="color: #728a05;">:before</span> (new-parent (node node))
+  (slot-makunbound node 'parent)          <span style="color: #81908f; font-weight: bold;">; </span><span style="color: #81908f; font-style: italic;">disconnect previous</span>
+  (<span style="color: #728a05;">with-inactive-layers</span> (consistent-tree) <span style="color: #81908f; font-weight: bold;">; </span><span style="color: #81908f; font-style: italic;">connect new</span>
+    (push node (children new-parent))))
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-4" class="outline-3">
+<h3 id="sec-2-4"><span class="section-number-3">2.4</span> updating the children of a node </h3>
+<div class="outline-text-3" id="text-2-4">
+
+<p>the basic format for updating the children of the node is similar to that of updating the parent.  this time around, we'll be operating on lists of children.  we collect the children which are to be added in the variable to-add and the children which are to be removed in the variable to-remove.
+</p><dl>
+<dt>remove old children</dt><dd>in a first step all children which don't exist in the new set of children are removed.  this is executed in the consistent-tree layer to ensure that the removed children and their current parents are left in a consistent state.
+</dd>
+<dt>add new children</dt><dd>the regular setf is handled by a parent method, however we should ensure that all new children have the right parent set.  this should be done outside the current layer as we're handling all possible invalid states manually.
+</dd>
+</dl>
+
+
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">define-layered-method</span> (setf children)
+  <span style="color: #728a05;">:in-layer</span> consistent-tree
+  <span style="color: #728a05;">:before</span> (new-children (node node))
+  (<span style="color: #728a05;">let</span> ((to-add (set-difference new-children (children node)))
+        (to-remove (set-difference (children node) new-children)))
+    <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">disconnect previous</span>
+    (<span style="color: #728a05;">when</span> (children node)
+      (<span style="color: #728a05;">dolist</span> (child to-remove)
+        (slot-makunbound child 'parent)))
+    <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">connect new</span>
+    (<span style="color: #728a05;">with-inactive-layers</span> (consistent-tree)
+      (<span style="color: #728a05;">dolist</span> (child to-add)
+        (setf (parent child) node)))))
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-2-5" class="outline-3">
+<h3 id="sec-2-5"><span class="section-number-3">2.5</span> conclusion </h3>
+<div class="outline-text-3" id="text-2-5">
+
+<p>by disabling layers at will, we can influence the code which we call.  disabling our own layer can make operations which must stay consistent simple to implement, and easy to understand.  by placing this code in a separate layer, it's split from other code which may operate on these primitives thus decreasing the scope of the code.
+</p>
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-3" class="outline-2">
+<h2 id="sec-3"><span class="section-number-2">3</span> depending on other layers &nbsp;&nbsp;&nbsp;<span class="tag"><span class="abstraction">abstraction</span></span></h2>
+<div class="outline-text-2" id="text-3">
+
+<p>when programming with contexts, we may have a context which depends on another context to be active.  there are various options for configuring this.
+</p><dl>
+<dt>explicitly enable</dt><dd>a layer may require another layer to be explicitly enabled.  if the layer is not enabled, we should enable the layer.
+</dd>
+<dt>warn on failure</dt><dd>throw a warning if the layer we depend on isn't available.
+</dd>
+<dt>error on failure</dt><dd>throw an error if the layer we depend on isn't available.
+</dd>
+<dt>static dependency</dt><dd>it may be the case that we know we depend on a static amount of layers.  this will allow for caching.
+</dd>
+<dt>dynamic dependency</dt><dd>it could be so that we depend on the layers dynamically.  we then need to check the dependency each time the layer is added or removed from the set of active layers.
+</dd>
+<dt>bi-dependent relationship</dt><dd>it's possible that both layers depend on each other.  when one layer is active, the other layer must be active as well.  this means that we must also disable the other layer, when the current layer is removed.
+</dd>
+</dl>
+
+
+<p>
+not all of these are currently implemented.  in three steps we envolve from a solution which only works for one case, to a more generic solution which declaratively specifies our request.
+</p>
+
+</div>
+
+<div id="outline-container-3-1" class="outline-3">
+<h3 id="sec-3-1"><span class="section-number-3">3.1</span> example: enable and warn </h3>
+<div class="outline-text-3" id="text-3-1">
+
+<p>in order to manually handle the creation and removing, we need to create a metaclass for our layer.  we can then override the adjoin-layer-using-class method and manually require the required layer there.  if the second value we return is T, the result of enabling the layer could be cached.  in this case we can't do that, as we want to be able to warn that the required layer wasn't active yet.
+</p>
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">defclass</span> <span style="color: #a57705;">enable-and-warn-meta</span> (standard-layer-class) ())
+
+(deflayer depending-layer ()
+  ()
+  (<span style="color: #728a05;">:metaclass</span> enable-and-warn-meta))
+
+(deflayer another-layer ())
+
+(<span style="color: #728a05;">define-layered-method</span> adjoin-layer-using-class
+  <span style="color: #728a05;">:around</span> ((meta enable-and-warn-meta) active-layers)
+  (<span style="color: #728a05;">unless</span> (layer-active-p 'another-layer active-layers)
+    (<span style="color: #c60007; font-weight: bold;">warn</span> <span style="color: #259185;">"required layer ~A wasn't active"</span> 'another-layer))
+  (values (call-next-layered-method meta (adjoin-layer 'another-layer active-layers))
+          nil))
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-3-2" class="outline-3">
+<h3 id="sec-3-2"><span class="section-number-3">3.2</span> example: enable and warn 2 </h3>
+<div class="outline-text-3" id="text-3-2">
+
+<p>in its implementation, deflayer creates a class and has options for specifying a metaclass.  extra options are allowed and are sent to the creation of the instance of the metaclass, representing the layer.  layer metaclasses should inherit from standard-layer-class.  with this we can allow our users to specify their configuration declaratyvely as keywords.  we store the layers which need to be activated before us and after us in the class object.
+</p>
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">defclass</span> <span style="color: #a57705;">enable-and-warn-meta</span> (standard-layer-class)
+  ((required-layers-before <span style="color: #728a05;">:initform</span> nil
+                           <span style="color: #728a05;">:accessor</span> required-layers-before
+                           <span style="color: #728a05;">:initarg</span> <span style="color: #728a05;">:enabled-before-me</span>)
+   (required-layers-after <span style="color: #728a05;">:initform</span> nil
+                          <span style="color: #728a05;">:accessor</span> required-layers-after
+                          <span style="color: #728a05;">:initarg</span> <span style="color: #728a05;">:enabled-after-me</span>))
+  (<span style="color: #728a05;">:documentation</span> <span style="color: #259185;">"layer which allows for requiring other layers to be called before and after our current layer"</span>))
+</pre>
+
+
+<p>
+with this in place, we can implement the adjoin-layer-using-class method for our metaclass.  some things are noteworthy here.  as we can require layers to be executed before our layer and after our layer, we need to ensure that they are executed in the right order.  when we say a layer is executed before us, we mean that that layer wraps around our layer, the example near the end should explain this.  the variable active-befores contains all layers which need to be activate before we are activated.  the variable inactive-afters contains all the layers which need to be activated after us, but which haven't already been activated.
+</p>
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">define-layered-method</span> adjoin-layer-using-class
+  <span style="color: #728a05;">:around</span> ((meta enable-and-warn-meta) active-layers)
+  (<span style="color: #728a05;">let</span> ((active-befores (remove-if-not (rcurry #'layer-active-p active-layers)
+                                       (required-layers-before meta)))
+        (inactive-afters (remove-if (rcurry #'layer-active-p active-layers)
+                                    (required-layers-after meta))))
+    (<span style="color: #728a05;">when</span> active-befores
+      (<span style="color: #c60007; font-weight: bold;">warn</span> <span style="color: #259185;">"some before layers were already active. disabling them to ensure correct execution order: ~A"</span> active-befores)
+      (setf active-layers
+            (remove-layers active-befores active-layers)))
+    (<span style="color: #728a05;">when</span> inactive-afters
+      <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">handled in first call values makes</span>
+      (<span style="color: #c60007; font-weight: bold;">warn</span> <span style="color: #259185;">"some after layers aren't active yet.  enabling them to ensure correct execution order: ~A"</span> inactive-afters))
+    (values
+     (adjoin-layers (required-layers-before meta)
+                    (call-next-layered-method
+                     meta
+                     (adjoin-layers inactive-afters active-layers)))
+     nil)))
+</pre>
+
+
+<p>
+an example use case showcases how everyhting works, we create a layer which needs one layer activated before itself and one layer to be activated after itself.  there's no inherent reason why we couldn't specify more layers in :enabled-before-me or :enabled-after-me.  we pick one for the brevity of the example.  in a first step we define all layers.  from there on we construct a layered function which prints something.  we define a :before on each of the layers so we can see when the layer can perform its actions.  we add a test function to showcase the current use.
+</p>
+
+
+
+<pre class="src src-lisp">(deflayer depending-layer ()
+  ()
+  (<span style="color: #728a05;">:metaclass</span> enable-and-warn-meta)
+  (<span style="color: #728a05;">:enabled-before-me</span> before-me-layer)
+  (<span style="color: #728a05;">:enabled-after-me</span> after-me-layer))
+
+(deflayer before-me-layer)
+(deflayer after-me-layer)
+
+(<span style="color: #728a05;">define-layered-function</span> output-something ())
+
+(<span style="color: #728a05;">define-layered-method</span> output-something
+           ()
+           (format T <span style="color: #259185;">"~&amp;default output~&amp;"</span>))
+
+(<span style="color: #728a05;">define-layered-method</span> output-something
+           <span style="color: #728a05;">:in-layer</span> before-me-layer
+           <span style="color: #728a05;">:before</span> ()
+           (format T <span style="color: #259185;">"~&amp;before me layer~&amp;"</span>))
+
+(<span style="color: #728a05;">define-layered-method</span> output-something
+           <span style="color: #728a05;">:in-layer</span> after-me-layer
+           <span style="color: #728a05;">:before</span> ()
+           (format T <span style="color: #259185;">"~&amp;after me layer~&amp;"</span>))
+
+(<span style="color: #728a05;">define-layered-method</span> output-something
+           <span style="color: #728a05;">:in-layer</span> depending-layer
+           <span style="color: #728a05;">:before</span> ()
+           (format T <span style="color: #259185;">"~&amp;in myself~&amp;"</span>))
+
+(<span style="color: #728a05;">defun</span> <span style="color: #2075c7;">test-output-something</span> ()
+  (format T <span style="color: #259185;">"~&amp;~%==no active layers==~&amp;~%"</span>)
+  (output-something)
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; default output</span>
+
+  (format T <span style="color: #259185;">"~&amp;~%==activating depending-layer only==~&amp;~%"</span>)
+  (<span style="color: #728a05;">with-active-layers</span> (depending-layer)
+    (output-something))
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; warning:</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt;    some after layers aren't active yet.  enabling them to ensure correct execution order: (after-me-layer)</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; before me layer</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; in myself</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; after me layer</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; default output</span>
+  (format T <span style="color: #259185;">"~&amp;~%==activating after-me-layer depending-layer before-me-layer==~&amp;~%"</span>)
+  (<span style="color: #728a05;">with-active-layers</span> (after-me-layer depending-layer before-me-layer)
+    (output-something))
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; before me layer</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; in myself</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; after me layer</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; default output</span>
+  (format T <span style="color: #259185;">"~&amp;~%==done testing==~&amp;"</span>))
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-3-3" class="outline-3">
+<h3 id="sec-3-3"><span class="section-number-3">3.3</span> general approach </h3>
+<div class="outline-text-3" id="text-3-3">
+
+<p>although many extra features could be added to a metaclass which allows for requiring other layers, we keep it to the basics for now.  interesting features which haven't been implemented yet would be:
+</p><dl>
+<dt>automatic disabling of automatically enabled layers</dt><dd>layers which are enabled now, are not disabled when the layer that created them is removed.  support for this should be optional, as other layers might've depended on this layer also (within the same system, that could be discovered also).  unless more constraints are added, this can't be cached.
+</dd>
+<dt>naive loop detection at runtime</dt><dd>as we declaratively specify which layers we depend on, it's very well possible we create an infinite loop when trying to discover which layers need to be enabled for the current layer.
+</dd>
+<dt>co-dependent layers</dt><dd>if both layers depend on each other in the same order, then the layers need to be activated and deactivated together.  this allows us to use the cache whilst still allowing for enabling and disabling the layers correctly.
+</dd>
+</dl>
+
+
+
+</div>
+
+<div id="outline-container-3-3-1" class="outline-4">
+<h4 id="sec-3-3-1"><span class="section-number-4">3.3.1</span> implementing the metaclass </h4>
+<div class="outline-text-4" id="text-3-3-1">
+
+<p>the metaclass specification gains some extra configuration options.  these options are simply the configuration of what the adjoin-layer-using-class will execute.
+</p>
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">defclass</span> <span style="color: #a57705;">depending-meta</span> (standard-layer-class)
+  ((required-layers-before <span style="color: #728a05;">:initform</span> nil
+                           <span style="color: #728a05;">:accessor</span> required-layers-before
+                           <span style="color: #728a05;">:initarg</span> <span style="color: #728a05;">:enabled-before-me</span>)
+   (required-layers-after <span style="color: #728a05;">:initform</span> nil
+                          <span style="color: #728a05;">:accessor</span> required-layers-after
+                          <span style="color: #728a05;">:initarg</span> <span style="color: #728a05;">:enabled-after-me</span>)
+   (warn-on-oddities <span style="color: #728a05;">:initform</span> nil
+                     <span style="color: #728a05;">:reader</span> warn-on-oddities-p
+                     <span style="color: #728a05;">:initarg</span> <span style="color: #728a05;">:warn-p</span>)
+   (may-be-cached-p <span style="color: #728a05;">:initform</span> t
+                    <span style="color: #728a05;">:reader</span> may-be-cached-p
+                    <span style="color: #728a05;">:initarg</span> <span style="color: #728a05;">:cached-p</span>))
+  (<span style="color: #728a05;">:documentation</span> <span style="color: #259185;">"layer which allows for requiring other layers to be called before and after our current layer"</span>))
+
+(<span style="color: #728a05;">define-layered-method</span> adjoin-layer-using-class
+  <span style="color: #728a05;">:around</span> ((meta depending-meta) active-layers)
+  (<span style="color: #728a05;">let</span> ((active-befores (remove-if-not (rcurry #'layer-active-p active-layers)
+                                       (required-layers-before meta)))
+        (inactive-afters (remove-if (rcurry #'layer-active-p active-layers)
+                                    (required-layers-after meta))))
+    (<span style="color: #728a05;">when</span> active-befores
+      (<span style="color: #728a05;">when</span> (warn-on-oddities-p meta)
+        (<span style="color: #c60007; font-weight: bold;">warn</span> <span style="color: #259185;">"some before layers were already active. disabling them to ensure correct execution order: ~A"</span> active-befores))
+      (setf active-layers
+            (remove-layers active-befores active-layers)))
+    (<span style="color: #728a05;">when</span> (and inactive-afters (warn-on-oddities-p meta))
+      <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">handled in first call values makes</span>
+      (<span style="color: #c60007; font-weight: bold;">warn</span> <span style="color: #259185;">"some after layers aren't active yet.  enabling them to ensure correct execution order: ~A"</span> inactive-afters))
+    (values
+     (adjoin-layers (required-layers-before meta)
+                    (call-next-layered-method
+                     meta
+                     (adjoin-layers inactive-afters active-layers)))
+     (may-be-cached-p meta))))
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-3-3-2" class="outline-4">
+<h4 id="sec-3-3-2"><span class="section-number-4">3.3.2</span> example use </h4>
+<div class="outline-text-4" id="text-3-3-2">
+
+<p>we adapt the previous example so it showcases the features of the new metaclass.  with the caching turned on, we can't replicate the receival of warnings.
+</p>
+
+
+
+<pre class="src src-lisp">(deflayer middle-layer ()
+  ()
+  (<span style="color: #728a05;">:metaclass</span> depending-meta)
+  (<span style="color: #728a05;">:enabled-before-me</span> before-me-layer)
+  (<span style="color: #728a05;">:enabled-after-me</span> after-me-layer)
+  (<span style="color: #728a05;">:warn-p</span> t)
+  (<span style="color: #728a05;">:cached-p</span> t))
+
+(deflayer before-me-layer)
+(deflayer after-me-layer)
+
+(<span style="color: #728a05;">define-layered-function</span> output-something ())
+
+(<span style="color: #728a05;">define-layered-method</span> output-something
+           ()
+           (format T <span style="color: #259185;">"~&amp;default output~&amp;"</span>))
+
+(<span style="color: #728a05;">define-layered-method</span> output-something
+           <span style="color: #728a05;">:in-layer</span> before-me-layer
+           <span style="color: #728a05;">:before</span> ()
+           (format T <span style="color: #259185;">"~&amp;before me layer~&amp;"</span>))
+
+(<span style="color: #728a05;">define-layered-method</span> output-something
+           <span style="color: #728a05;">:in-layer</span> after-me-layer
+           <span style="color: #728a05;">:before</span> ()
+           (format T <span style="color: #259185;">"~&amp;after me layer~&amp;"</span>))
+
+(<span style="color: #728a05;">define-layered-method</span> output-something
+           <span style="color: #728a05;">:in-layer</span> middle-layer
+           <span style="color: #728a05;">:before</span> ()
+           (format T <span style="color: #259185;">"~&amp;in myself~&amp;"</span>))
+
+(<span style="color: #728a05;">defun</span> <span style="color: #2075c7;">test-output-something</span> ()
+  (format T <span style="color: #259185;">"~&amp;~%==no active layers==~&amp;~%"</span>)
+  (output-something)
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; default output</span>
+
+  (format T <span style="color: #259185;">"~&amp;~%==activating depending-layer only (1)==~&amp;~%"</span>)
+  (<span style="color: #728a05;">with-active-layers</span> (middle-layer)
+    (output-something))
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; warning:</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt;    some after layers aren't active yet.  enabling them to ensure correct execution order: (after-me-layer)</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; before me layer</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; in myself</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; after me layer</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; default output</span>
+
+  (format T <span style="color: #259185;">"~&amp;~%==activating dependent-layer only (2)==~&amp;~%"</span>)
+  (<span style="color: #728a05;">with-active-layers</span> (middle-layer)
+    (output-something))
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; before me layer</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; in myself</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; after me layer</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; default output</span>
+  (format T <span style="color: #259185;">"~&amp; -&gt; the warning is gone, layer activation was cached~&amp;"</span>)
+
+  (format T <span style="color: #259185;">"~&amp;~%==activating after-me-layer depending-layer before-me-layer==~&amp;~%"</span>)
+  (<span style="color: #728a05;">with-active-layers</span> (after-me-layer middle-layer before-me-layer)
+    (output-something))
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; before me layer</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; in myself</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; after me layer</span>
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">&gt; default output</span>
+  (format T <span style="color: #259185;">"~&amp;~%==done testing==~&amp;"</span>))
+</pre>
+
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="postamble">
+<p class="date">Date: 2012-02-18 02:09:50 CET</p>
+<p class="author">Author: Aad Versteden</p>
+<p class="creator">Org version 7.7 with Emacs version 23</p>
+<a href="http://validator.w3.org/check?uri=referer">Validate XHTML 1.0</a>
+
+</div>
+</body>
+</html>

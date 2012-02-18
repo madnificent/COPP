@@ -1,0 +1,3 @@
+Context Oriented Programming Patterns for ContextL
+
+collection of programming patterns usable for ContextL.  does not contain much yet, feel free to extend.  see [[./copp.html][copp.html]] or [[./copp.org][copp.org]] for code and explenation.

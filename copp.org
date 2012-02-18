@@ -1,0 +1,349 @@
+#+BABEL: :tangle no :cache no :session yes :results silent :no-expand yes :noweb yes :exports code :padline yes
+#+startup: hideblocks overview fninline
+
+Context Oriented Programming Patterns
+
+context oriented programming is similar to aspect oriented programming.  it changes the way in which applications can be built.  many constructions which were previously complex or ugly, could now become trivial to implement.  i decided to write down the experiences i have whilst learning ContxtL in the form of reusable patterns because information about using ContextL seems to be sparse.
+
+
+* preamble
+describes needed libraries and some minor support code
+
+** libraries
+so far, this document doesn't export any code to lisp files.  if you'd want to run it, you should assume the following libraries are included in the package in which you evaluate the code:
+- ContextL
+- alexandria
+
+** supporting code
+the following functions are used throughout the code as simple helper functions.
+
+*** operating on multiple layers
+adjoin-layer and remove-layer operate on a single layer.  in some cases we want to operate on a list of layers.  this is handled by the following functions.
+
+#+begin_src lisp
+  (defun adjoin-layers (layers active-layers)
+    (reduce #'adjoin-layer layers
+            :initial-value active-layers
+            :from-end t))
+  
+  (defun remove-layers (layers active-layers)
+    (reduce #'remove-layer layers
+            :initial-value active-layers
+            :from-end t))
+#+end_src
+
+* backlinks                                                         :pattern:
+under backlinks we understand the concept in which an instance links to another instance, and in which the other instance links back.  when one instance is updated, the other instance should be updated as well.  we can model this with contexts as follows:
+- create functions to update the normal link of the object
+- create a layer for managing the backlinks
+- augment the methods for managing links in the new layer, with code which updates the previous and new links.
+
+it's generally good to implement the lowest level at which the changes can occur.  for instance: it may be more interesting to extend slot-makunbound, than a custom method which turns out to call that method.
+
+as an example, we implement a doubly linked tree.  the doubly linked tree is a tree in which the parent knows its children and vice versa.  the doubly linked tree guarentees that the relationship always is in sync.
+
+** data definition
+we create a new layer named consistent tree which ensures the tree stays in a consistent state and we implement a new layered class which contains slots for the parent and children relationships.  we assume a node has no parent when the parent is unbound.  we assume a node has no children when children is nil.  with this structure we can both look at how accessors can be extended, as look at how primitive methods like slot-makunbound can be overridden.
+
+#+begin_src lisp
+  (deflayer consistent-tree)
+  
+  (define-layered-class node
+    ()
+    ((parent :layered-accessor parent)
+     (children :layered-accessor children :initform nil)))
+#+end_src
+
+** removing the parent of a node
+removing a parent is handled by unbinding the parent.  as the class 'node is a layered class, we can extend the layered method slot-makunbound-using-layer.  when our parent is removed, we must remove ourselves from the list of children of our parent.  this removal must be done outside of our current layer, so as to ensure no other methods of our consistency-ensuring layer are being called.
+
+#+begin_src lisp
+  (define-layered-method slot-makunbound-using-layer
+    :in-layer consistent-tree
+    :before (class (node node) (slot (eql 'parent)) writer)
+    (when (slot-boundp node 'parent)
+      (with-inactive-layers (consistent-tree)
+        (setf (children (parent node))
+              (remove node (children (parent node)))))))
+#+end_src
+
+** setting the parent of a node
+for setting the parent, we must firstly ensure that our possibly existing previous parent doesn't contain a link to us anymore.  secondly, we must make sure our new parent has us as a child.
+
+we can first unset our parent and then set the new parent.  unsetting is done by unbinding the slot, which we must do in the consistent-tree layer to ensure that our previous parent doesn't know us anymore.  this will call slot-makunbound-using-layer which we've just implemented.  the next step is assigning the new parent.  setting the parent slot itself is done by the next method, however we must still ensure that our new parent knows us.  we manually add ourselves to its children.  again, as we're manually fixing things here, we disable the consistent-tree layer.
+
+#+begin_src lisp
+  (define-layered-method (setf parent)
+    :in-layer consistent-tree
+    :before (new-parent (node node))
+    (slot-makunbound node 'parent)          ; disconnect previous
+    (with-inactive-layers (consistent-tree) ; connect new
+      (push node (children new-parent))))
+#+end_src
+
+** updating the children of a node
+the basic format for updating the children of the node is similar to that of updating the parent.  this time around, we'll be operating on lists of children.  we collect the children which are to be added in the variable to-add and the children which are to be removed in the variable to-remove.
+- remove old children :: in a first step all children which don't exist in the new set of children are removed.  this is executed in the consistent-tree layer to ensure that the removed children and their current parents are left in a consistent state.
+- add new children :: the regular setf is handled by a parent method, however we should ensure that all new children have the right parent set.  this should be done outside the current layer as we're handling all possible invalid states manually.
+
+#+begin_src lisp
+  (define-layered-method (setf children)
+    :in-layer consistent-tree
+    :before (new-children (node node))
+    (let ((to-add (set-difference new-children (children node)))
+          (to-remove (set-difference (children node) new-children)))
+      ;; disconnect previous
+      (when (children node)
+        (dolist (child to-remove)
+          (slot-makunbound child 'parent)))
+      ;; connect new
+      (with-inactive-layers (consistent-tree)
+        (dolist (child to-add)
+          (setf (parent child) node)))))
+#+end_src
+
+** conclusion
+by disabling layers at will, we can influence the code which we call.  disabling our own layer can make operations which must stay consistent simple to implement, and easy to understand.  by placing this code in a separate layer, it's split from other code which may operate on these primitives thus decreasing the scope of the code.
+
+* depending on other layers                                     :abstraction:
+when programming with contexts, we may have a context which depends on another context to be active.  there are various options for configuring this.
+- explicitly enable :: a layer may require another layer to be explicitly enabled.  if the layer is not enabled, we should enable the layer.
+- warn on failure :: throw a warning if the layer we depend on isn't available.
+- error on failure :: throw an error if the layer we depend on isn't available.
+- static dependency :: it may be the case that we know we depend on a static amount of layers.  this will allow for caching.
+- dynamic dependency :: it could be so that we depend on the layers dynamically.  we then need to check the dependency each time the layer is added or removed from the set of active layers.
+- bi-dependent relationship :: it's possible that both layers depend on each other.  when one layer is active, the other layer must be active as well.  this means that we must also disable the other layer, when the current layer is removed.
+
+not all of these are currently implemented.  in three steps we envolve from a solution which only works for one case, to a more generic solution which declaratively specifies our request.
+
+** example: enable and warn
+in order to manually handle the creation and removing, we need to create a metaclass for our layer.  we can then override the adjoin-layer-using-class method and manually require the required layer there.  if the second value we return is T, the result of enabling the layer could be cached.  in this case we can't do that, as we want to be able to warn that the required layer wasn't active yet.
+
+#+begin_src lisp
+  (defclass enable-and-warn-meta (standard-layer-class) ())
+  
+  (deflayer depending-layer ()
+    ()
+    (:metaclass enable-and-warn-meta))
+  
+  (deflayer another-layer ())
+  
+  (define-layered-method adjoin-layer-using-class
+    :around ((meta enable-and-warn-meta) active-layers)
+    (unless (layer-active-p 'another-layer active-layers)
+      (warn "required layer ~A wasn't active" 'another-layer))
+    (values (call-next-layered-method meta (adjoin-layer 'another-layer active-layers))
+            nil))
+#+end_src
+
+** example: enable and warn 2
+in its implementation, deflayer creates a class and has options for specifying a metaclass.  extra options are allowed and are sent to the creation of the instance of the metaclass, representing the layer.  layer metaclasses should inherit from standard-layer-class.  with this we can allow our users to specify their configuration declaratyvely as keywords.  we store the layers which need to be activated before us and after us in the class object.
+
+#+begin_src lisp
+  (defclass enable-and-warn-meta (standard-layer-class)
+    ((required-layers-before :initform nil
+                             :accessor required-layers-before
+                             :initarg :enabled-before-me)
+     (required-layers-after :initform nil
+                            :accessor required-layers-after
+                            :initarg :enabled-after-me))
+    (:documentation "layer which allows for requiring other layers to be called before and after our current layer"))
+#+end_src
+
+with this in place, we can implement the adjoin-layer-using-class method for our metaclass.  some things are noteworthy here.  as we can require layers to be executed before our layer and after our layer, we need to ensure that they are executed in the right order.  when we say a layer is executed before us, we mean that that layer wraps around our layer, the example near the end should explain this.  the variable active-befores contains all layers which need to be activate before we are activated.  the variable inactive-afters contains all the layers which need to be activated after us, but which haven't already been activated.
+
+#+begin_src lisp
+  (define-layered-method adjoin-layer-using-class
+    :around ((meta enable-and-warn-meta) active-layers)
+    (let ((active-befores (remove-if-not (rcurry #'layer-active-p active-layers)
+                                         (required-layers-before meta)))
+          (inactive-afters (remove-if (rcurry #'layer-active-p active-layers)
+                                      (required-layers-after meta))))
+      (when active-befores
+        (warn "some before layers were already active. disabling them to ensure correct execution order: ~A" active-befores)
+        (setf active-layers
+              (remove-layers active-befores active-layers)))
+      (when inactive-afters
+        ;; handled in first call values makes
+        (warn "some after layers aren't active yet.  enabling them to ensure correct execution order: ~A" inactive-afters))
+      (values
+       (adjoin-layers (required-layers-before meta)
+                      (call-next-layered-method
+                       meta
+                       (adjoin-layers inactive-afters active-layers)))
+       nil)))
+#+end_src
+
+an example use case showcases how everyhting works, we create a layer which needs one layer activated before itself and one layer to be activated after itself.  there's no inherent reason why we couldn't specify more layers in :enabled-before-me or :enabled-after-me.  we pick one for the brevity of the example.  in a first step we define all layers.  from there on we construct a layered function which prints something.  we define a :before on each of the layers so we can see when the layer can perform its actions.  we add a test function to showcase the current use.
+
+#+begin_src lisp
+  (deflayer depending-layer ()
+    ()
+    (:metaclass enable-and-warn-meta)
+    (:enabled-before-me before-me-layer)
+    (:enabled-after-me after-me-layer))
+  
+  (deflayer before-me-layer)
+  (deflayer after-me-layer)
+  
+  (define-layered-function output-something ())
+  
+  (define-layered-method output-something
+             ()
+             (format T "~&default output~&"))
+  
+  (define-layered-method output-something
+             :in-layer before-me-layer
+             :before ()
+             (format T "~&before me layer~&"))
+  
+  (define-layered-method output-something
+             :in-layer after-me-layer
+             :before ()
+             (format T "~&after me layer~&"))
+  
+  (define-layered-method output-something
+             :in-layer depending-layer
+             :before ()
+             (format T "~&in myself~&"))
+  
+  (defun test-output-something ()
+    (format T "~&~%==no active layers==~&~%")
+    (output-something)
+    ;; > default output
+  
+    (format T "~&~%==activating depending-layer only==~&~%")
+    (with-active-layers (depending-layer)
+      (output-something))
+    ;; > warning:
+    ;; >    some after layers aren't active yet.  enabling them to ensure correct execution order: (after-me-layer)
+    ;; > before me layer
+    ;; > in myself
+    ;; > after me layer
+    ;; > default output
+    (format T "~&~%==activating after-me-layer depending-layer before-me-layer==~&~%")
+    (with-active-layers (after-me-layer depending-layer before-me-layer)
+      (output-something))
+    ;; > before me layer
+    ;; > in myself
+    ;; > after me layer
+    ;; > default output
+    (format T "~&~%==done testing==~&"))
+#+end_src
+
+** general approach
+although many extra features could be added to a metaclass which allows for requiring other layers, we keep it to the basics for now.  interesting features which haven't been implemented yet would be:
+- automatic disabling of automatically enabled layers :: layers which are enabled now, are not disabled when the layer that created them is removed.  support for this should be optional, as other layers might've depended on this layer also (within the same system, that could be discovered also).  unless more constraints are added, this can't be cached.
+- naive loop detection at runtime :: as we declaratively specify which layers we depend on, it's very well possible we create an infinite loop when trying to discover which layers need to be enabled for the current layer.
+- co-dependent layers :: if both layers depend on each other in the same order, then the layers need to be activated and deactivated together.  this allows us to use the cache whilst still allowing for enabling and disabling the layers correctly.
+
+*** implementing the metaclass
+the metaclass specification gains some extra configuration options.  these options are simply the configuration of what the adjoin-layer-using-class will execute.
+
+#+begin_src lisp
+  (defclass depending-meta (standard-layer-class)
+    ((required-layers-before :initform nil
+                             :accessor required-layers-before
+                             :initarg :enabled-before-me)
+     (required-layers-after :initform nil
+                            :accessor required-layers-after
+                            :initarg :enabled-after-me)
+     (warn-on-oddities :initform nil
+                       :reader warn-on-oddities-p
+                       :initarg :warn-p)
+     (may-be-cached-p :initform t
+                      :reader may-be-cached-p
+                      :initarg :cached-p))
+    (:documentation "layer which allows for requiring other layers to be called before and after our current layer"))
+  
+  (define-layered-method adjoin-layer-using-class
+    :around ((meta depending-meta) active-layers)
+    (let ((active-befores (remove-if-not (rcurry #'layer-active-p active-layers)
+                                         (required-layers-before meta)))
+          (inactive-afters (remove-if (rcurry #'layer-active-p active-layers)
+                                      (required-layers-after meta))))
+      (when active-befores
+        (when (warn-on-oddities-p meta)
+          (warn "some before layers were already active. disabling them to ensure correct execution order: ~A" active-befores))
+        (setf active-layers
+              (remove-layers active-befores active-layers)))
+      (when (and inactive-afters (warn-on-oddities-p meta))
+        ;; handled in first call values makes
+        (warn "some after layers aren't active yet.  enabling them to ensure correct execution order: ~A" inactive-afters))
+      (values
+       (adjoin-layers (required-layers-before meta)
+                      (call-next-layered-method
+                       meta
+                       (adjoin-layers inactive-afters active-layers)))
+       (may-be-cached-p meta))))
+#+end_src
+
+*** example use
+we adapt the previous example so it showcases the features of the new metaclass.  with the caching turned on, we can't replicate the receival of warnings.
+
+#+begin_src lisp
+  (deflayer middle-layer ()
+    ()
+    (:metaclass depending-meta)
+    (:enabled-before-me before-me-layer)
+    (:enabled-after-me after-me-layer)
+    (:warn-p t)
+    (:cached-p t))
+  
+  (deflayer before-me-layer)
+  (deflayer after-me-layer)
+  
+  (define-layered-function output-something ())
+  
+  (define-layered-method output-something
+             ()
+             (format T "~&default output~&"))
+  
+  (define-layered-method output-something
+             :in-layer before-me-layer
+             :before ()
+             (format T "~&before me layer~&"))
+  
+  (define-layered-method output-something
+             :in-layer after-me-layer
+             :before ()
+             (format T "~&after me layer~&"))
+  
+  (define-layered-method output-something
+             :in-layer middle-layer
+             :before ()
+             (format T "~&in myself~&"))
+  
+  (defun test-output-something ()
+    (format T "~&~%==no active layers==~&~%")
+    (output-something)
+    ;; > default output
+  
+    (format T "~&~%==activating depending-layer only (1)==~&~%")
+    (with-active-layers (middle-layer)
+      (output-something))
+    ;; > warning:
+    ;; >    some after layers aren't active yet.  enabling them to ensure correct execution order: (after-me-layer)
+    ;; > before me layer
+    ;; > in myself
+    ;; > after me layer
+    ;; > default output
+    
+    (format T "~&~%==activating dependent-layer only (2)==~&~%")
+    (with-active-layers (middle-layer)
+      (output-something))
+    ;; > before me layer
+    ;; > in myself
+    ;; > after me layer
+    ;; > default output
+    (format T "~& -> the warning is gone, layer activation was cached~&")
+  
+    (format T "~&~%==activating after-me-layer depending-layer before-me-layer==~&~%")
+    (with-active-layers (after-me-layer middle-layer before-me-layer)
+      (output-something))
+    ;; > before me layer
+    ;; > in myself
+    ;; > after me layer
+    ;; > default output
+    (format T "~&~%==done testing==~&"))
+#+end_src
