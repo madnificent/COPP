@@ -347,3 +347,122 @@ we adapt the previous example so it showcases the features of the new metaclass.
     ;; > default output
     (format T "~&~%==done testing==~&"))
 #+end_src
+* an alternative to extensions by hooks                             :pattern:
+in order to let users extend applications, it's customary to provide hooks in various places of the code, mostly at the start and/or end of some important method.  such use can easily be replicated with context oriented programming.  for simplicity, this example assumes the application is started by a form which the user can wrap.  we split the trivial explanation in three parts:
+- system implementer :: explains what the base system which provides the hooks should implement.
+- extension implementer :: explains what the creator of extensions to the base system should implement.
+- system user :: explains what the user, who wants to enable the extensions, should do to enable them.
+
+as an example we extend a fictive application with hooks.  we assume a currently undefined hooks library is available.  the application contains bunnies, cookies, and has a way of eating hem.  as it's just a pigment of my imagination, it also contains other unexplained configuration.
+
+** system implementer
+as a system implementer you want to allow users to extend specific functions.  you'll need to export the symbols of those functions.  be sure to export only those functions which have well-defined semantics and for which the semantics are unlikely to change.
+
+we'll implement our example based on a hypothetical hooks library.
+
+*** old code
+in the old-fashioned way we create a hook which is called before the eating and after the eating.  we need to have these hooks because users may want to provide multiple functions on the same method qualifier.  otherwise a simple method specializer would have done the trick.
+
+#+begin_src lisp
+  (defgeneric eat (object cookie)
+    (:documentation "represents the eating of a cookie by an object"))
+  
+  (make-hook 'before-eat-hook)
+  (make-hook 'after-eat-hook)
+  
+  (defmethod eat (object cookie)
+    (call-hook before-eat-hook object cookie)
+    ;; default implementation of eating
+    (call-hook after-eat-hook object cookie))
+#+end_src
+
+*** new code
+the following code allows users to extend eat in their own layers, with their own method specializers.  not only is this less code, it will also provide more flexibility.
+
+#+begin_src lisp
+  (define-layered-function eat (object cookie)
+    (:documentation "represents the eating of a cookie by an object"))
+  
+  (define-layered-method eat
+    (object cookie)
+    ;; default implementation of eating
+    )
+#+end_src
+
+*** conclusion for the system implementer
+you need less code and get more user support.  you will, however, depend on the availability of ContextL.
+
+** extension implementer
+extensions are implemented similarly to method combination in CLOS.  again, we look at the old code for this functionality and the new code for it.  as an example we create an extension in which the eating of cookies is poisonous to bunnies.
+
+*** old code
+in the old code, we need to find the right hook and implement the functionality with our hook.  this is possible in various ways, we implement it by creating a new generic function.  the user will call #'cookies-poison-bunnies in order to use the extension.
+
+#+begin_src lisp
+  (defgeneric eat-extension (object cookie)
+    (:documentation "my eat-extension will make the bunny poisoned after it ate a cookie")
+    (:method (object cookie) nil))
+  
+  (defmethod eat-extension ((my-bunny bunny) (cookie cookie))
+    (poison my-bunny))
+  
+  (defun cookies-poison-bunnies ()
+    (add-hook 'after-eat-hook #'eat-extension))
+#+end_src
+
+*** new code
+the same code implemented in ContextL requires us to create a layer for our extension.  the user can enable this layer on demand.  we don't need a separate eat-extension method, we can simply use layered functions for it.  you could look at the layer as the first argument which is given to the generic function.  you don't need a function to enable the layer, the user will use a ContextL macro for that.
+
+#+begin_src lisp
+  (deflayer cookies-poison-bunnies)
+  
+  (define-layered-method eat
+    :in-layer cookies-poison-bunnies
+    :after ((my-bunny bunny) (cookie cookie))
+    (poison my-bunny))
+#+end_src
+
+in this case the ContextL version is shorter, it bares little overhead.  the hooks-version could be written shorter than it is now.
+
+*** advanced stuff
+there are more advantages to using ContextL than just this shorter code.  in some cases your extension may want to extend the functionality of another extension, or it may need the functionality of another extension.  by looking at an extension as one or more layers, we gain expressiveness.  for the former problem, one may inherit from another layer, for the latter problem you should take a look at [[*depending on other layers]] which provides an abstraction for such use.
+
+*** conclusion
+as an extension implementer, you receive a clear and simple syntax for defining extensions.  furthermore you can require functionality from other extensions, which isn't always clean in hooks libraries.  by using this, users will also receive more flexibility.  users can enable the extensions in some cases and disable them in other cases.  this, in turn, may make it feasibly to write new types of extensions.
+
+** system user
+the user of the system needs a way to enable the extensions he wants.  we'll assume the user has to call the #'main method to boot the application.  furthermore we'll assume the user wants to enable the 'cookies-poison-bunnies extension.
+
+*** old code
+in the old model, the user needs to load the extension and boot the application.
+
+#+begin_src lisp
+  (cookies-poison-bunnies)
+  (main)
+#+end_src
+
+*** new code
+in the new code, the user wraps the execution of #'main in a form which specifies which extensions are active in the current execution.  this requires a little more code, though it's not that much.
+
+#+begin_src lisp
+  (with-active-layers (cookies-poison-bunnies)
+    (main))
+#+end_src
+
+the user may specify multiple extensions at the same layer and can perform multiple executions with different active layers, something not very plausible with a hooks library.
+
+#+begin_src lisp
+  (with-active-layers (report-lifespan bunnies-can-fly Marxist-economy)
+    (format T "~&running a base case~&")
+    (main)
+    (with-active-layers (cookies-poison-bunnies)
+      (format T "~&and now we see what happens when bunnies die of cookies~&")
+      (main)
+      (with-inactive-layers (bunnies-can-fly)
+        (format T "~&and now we see what happens when bunnies can't fly, but die of eating cookies~&"))))
+#+end_src
+
+with-active-layers and with-inactive-layers can be nested at will and may contain any number of system extensions.  what's called extensions in this pattern, is called a layer in ContextL.
+
+*** conclusion
+from a user's point of view the system is slightly more complex, as there's a new macro called with-active-layers which has to be used.  there is some added flexibility..  as users normally need to learn how the hooks library works, the few seconds they need for typing with-active-layers is probably irrelevant.

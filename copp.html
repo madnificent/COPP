@@ -7,7 +7,7 @@ lang="en" xml:lang="en">
 <title>Context Oriented Programming Patterns</title>
 <meta http-equiv="Content-Type" content="text/html;charset=iso-8859-1"/>
 <meta name="generator" content="Org-mode"/>
-<meta name="generated" content="2012-02-18 02:09:50 CET"/>
+<meta name="generated" content="2012-02-20 15:55:30 CET"/>
 <meta name="author" content="Aad Versteden"/>
 <meta name="description" content=""/>
 <meta name="keywords" content=""/>
@@ -129,6 +129,31 @@ context oriented programming is similar to aspect oriented programming.  it chan
 <ul>
 <li><a href="#sec-3-3-1">3.3.1 implementing the metaclass </a></li>
 <li><a href="#sec-3-3-2">3.3.2 example use </a></li>
+</ul></li>
+</ul>
+</li>
+<li><a href="#sec-4">4 an alternative to extensions by hooks</a>
+<ul>
+<li><a href="#sec-4-1">4.1 system implementer </a>
+<ul>
+<li><a href="#sec-4-1-1">4.1.1 old code </a></li>
+<li><a href="#sec-4-1-2">4.1.2 new code </a></li>
+<li><a href="#sec-4-1-3">4.1.3 conclusion for the system implementer </a></li>
+</ul>
+</li>
+<li><a href="#sec-4-2">4.2 extension implementer </a>
+<ul>
+<li><a href="#sec-4-2-1">4.2.1 old code </a></li>
+<li><a href="#sec-4-2-2">4.2.2 new code </a></li>
+<li><a href="#sec-4-2-3">4.2.3 advanced stuff </a></li>
+<li><a href="#sec-4-2-4">4.2.4 conclusion </a></li>
+</ul>
+</li>
+<li><a href="#sec-4-3">4.3 system user </a>
+<ul>
+<li><a href="#sec-4-3-1">4.3.1 old code </a></li>
+<li><a href="#sec-4-3-2">4.3.2 new code </a></li>
+<li><a href="#sec-4-3-3">4.3.3 conclusion </a></li>
 </ul>
 </li>
 </ul>
@@ -657,11 +682,260 @@ an example use case showcases how everyhting works, we create a layer which need
 </div>
 </div>
 </div>
+
+</div>
+
+<div id="outline-container-4" class="outline-2">
+<h2 id="sec-4"><span class="section-number-2">4</span> an alternative to extensions by hooks &nbsp;&nbsp;&nbsp;<span class="tag"><span class="pattern">pattern</span></span></h2>
+<div class="outline-text-2" id="text-4">
+
+<p>in order to let users extend applications, it's customary to provide hooks in various places of the code, mostly at the start and/or end of some important method.  such use can easily be replicated with context oriented programming.  for simplicity, this example assumes the application is started by a form which the user can wrap.  we split the trivial explanation in three parts:
+</p><dl>
+<dt>system implementer</dt><dd>explains what the base system which provides the hooks should implement.
+</dd>
+<dt>extension implementer</dt><dd>explains what the creator of extensions to the base system should implement.
+</dd>
+<dt>system user</dt><dd>explains what the user, who wants to enable the extensions, should do to enable them.
+</dd>
+</dl>
+
+
+<p>
+as an example we extend a fictive application with hooks.  we assume a currently undefined hooks library is available.  the application contains bunnies, cookies, and has a way of eating hem.  as it's just a pigment of my imagination, it also contains other unexplained configuration.
+</p>
+
+</div>
+
+<div id="outline-container-4-1" class="outline-3">
+<h3 id="sec-4-1"><span class="section-number-3">4.1</span> system implementer </h3>
+<div class="outline-text-3" id="text-4-1">
+
+<p>as a system implementer you want to allow users to extend specific functions.  you'll need to export the symbols of those functions.  be sure to export only those functions which have well-defined semantics and for which the semantics are unlikely to change.
+</p>
+<p>
+we'll implement our example based on a hypothetical hooks library.
+</p>
+
+</div>
+
+<div id="outline-container-4-1-1" class="outline-4">
+<h4 id="sec-4-1-1"><span class="section-number-4">4.1.1</span> old code </h4>
+<div class="outline-text-4" id="text-4-1-1">
+
+<p>in the old-fashioned way we create a hook which is called before the eating and after the eating.  we need to have these hooks because users may want to provide multiple functions on the same method qualifier.  otherwise a simple method specializer would have done the trick.
+</p>
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">defgeneric</span> <span style="color: #2075c7;">eat</span> (object cookie)
+  (<span style="color: #728a05;">:documentation</span> <span style="color: #259185;">"represents the eating of a cookie by an object"</span>))
+
+(make-hook 'before-eat-hook)
+(make-hook 'after-eat-hook)
+
+(<span style="color: #728a05;">defmethod</span> <span style="color: #2075c7;">eat</span> (object cookie)
+  (call-hook before-eat-hook object cookie)
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">default implementation of eating</span>
+  (call-hook after-eat-hook object cookie))
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-4-1-2" class="outline-4">
+<h4 id="sec-4-1-2"><span class="section-number-4">4.1.2</span> new code </h4>
+<div class="outline-text-4" id="text-4-1-2">
+
+<p>the following code allows users to extend eat in their own layers, with their own method specializers.  not only is this less code, it will also provide more flexibility.
+</p>
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">define-layered-function</span> eat (object cookie)
+  (<span style="color: #728a05;">:documentation</span> <span style="color: #259185;">"represents the eating of a cookie by an object"</span>))
+
+(<span style="color: #728a05;">define-layered-method</span> eat
+  (object cookie)
+  <span style="color: #81908f; font-weight: bold;">;; </span><span style="color: #81908f; font-style: italic;">default implementation of eating</span>
+  )
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-4-1-3" class="outline-4">
+<h4 id="sec-4-1-3"><span class="section-number-4">4.1.3</span> conclusion for the system implementer </h4>
+<div class="outline-text-4" id="text-4-1-3">
+
+<p>you need less code and get more user support.  you will, however, depend on the availability of ContextL.
+</p>
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-4-2" class="outline-3">
+<h3 id="sec-4-2"><span class="section-number-3">4.2</span> extension implementer </h3>
+<div class="outline-text-3" id="text-4-2">
+
+<p>extensions are implemented similarly to method combination in CLOS.  again, we look at the old code for this functionality and the new code for it.  as an example we create an extension in which the eating of cookies is poisonous to bunnies.
+</p>
+
+</div>
+
+<div id="outline-container-4-2-1" class="outline-4">
+<h4 id="sec-4-2-1"><span class="section-number-4">4.2.1</span> old code </h4>
+<div class="outline-text-4" id="text-4-2-1">
+
+<p>in the old code, we need to find the right hook and implement the functionality with our hook.  this is possible in various ways, we implement it by creating a new generic function.  the user will call #'cookies-poison-bunnies in order to use the extension.
+</p>
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">defgeneric</span> <span style="color: #2075c7;">eat-extension</span> (object cookie)
+  (<span style="color: #728a05;">:documentation</span> <span style="color: #259185;">"my eat-extension will make the bunny poisoned after it ate a cookie"</span>)
+  (<span style="color: #728a05;">:method</span> (object cookie) nil))
+
+(<span style="color: #728a05;">defmethod</span> <span style="color: #2075c7;">eat-extension</span> ((my-bunny bunny) (cookie cookie))
+  (poison my-bunny))
+
+(<span style="color: #728a05;">defun</span> <span style="color: #2075c7;">cookies-poison-bunnies</span> ()
+  (add-hook 'after-eat-hook #'eat-extension))
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-4-2-2" class="outline-4">
+<h4 id="sec-4-2-2"><span class="section-number-4">4.2.2</span> new code </h4>
+<div class="outline-text-4" id="text-4-2-2">
+
+<p>the same code implemented in ContextL requires us to create a layer for our extension.  the user can enable this layer on demand.  we don't need a separate eat-extension method, we can simply use layered functions for it.  you could look at the layer as the first argument which is given to the generic function.  you don't need a function to enable the layer, the user will use a ContextL macro for that.
+</p>
+
+
+
+<pre class="src src-lisp">(deflayer cookies-poison-bunnies)
+
+(<span style="color: #728a05;">define-layered-method</span> eat
+  <span style="color: #728a05;">:in-layer</span> cookies-poison-bunnies
+  <span style="color: #728a05;">:after</span> ((my-bunny bunny) (cookie cookie))
+  (poison my-bunny))
+</pre>
+
+
+<p>
+in this case the ContextL version is shorter, it bares little overhead.  the hooks-version could be written shorter than it is now.
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-4-2-3" class="outline-4">
+<h4 id="sec-4-2-3"><span class="section-number-4">4.2.3</span> advanced stuff </h4>
+<div class="outline-text-4" id="text-4-2-3">
+
+<p>there are more advantages to using ContextL than just this shorter code.  in some cases your extension may want to extend the functionality of another extension, or it may need the functionality of another extension.  by looking at an extension as one or more layers, we gain expressiveness.  for the former problem, one may inherit from another layer, for the latter problem you should take a look at <a href="#sec-3">*depending on other layers</a> which provides an abstraction for such use.
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-4-2-4" class="outline-4">
+<h4 id="sec-4-2-4"><span class="section-number-4">4.2.4</span> conclusion </h4>
+<div class="outline-text-4" id="text-4-2-4">
+
+<p>as an extension implementer, you receive a clear and simple syntax for defining extensions.  furthermore you can require functionality from other extensions, which isn't always clean in hooks libraries.  by using this, users will also receive more flexibility.  users can enable the extensions in some cases and disable them in other cases.  this, in turn, may make it feasibly to write new types of extensions.
+</p>
+</div>
+</div>
+
+</div>
+
+<div id="outline-container-4-3" class="outline-3">
+<h3 id="sec-4-3"><span class="section-number-3">4.3</span> system user </h3>
+<div class="outline-text-3" id="text-4-3">
+
+<p>the user of the system needs a way to enable the extensions he wants.  we'll assume the user has to call the #'main method to boot the application.  furthermore we'll assume the user wants to enable the 'cookies-poison-bunnies extension.
+</p>
+
+</div>
+
+<div id="outline-container-4-3-1" class="outline-4">
+<h4 id="sec-4-3-1"><span class="section-number-4">4.3.1</span> old code </h4>
+<div class="outline-text-4" id="text-4-3-1">
+
+<p>in the old model, the user needs to load the extension and boot the application.
+</p>
+
+
+
+<pre class="src src-lisp">(cookies-poison-bunnies)
+(main)
+</pre>
+
+
+</div>
+
+</div>
+
+<div id="outline-container-4-3-2" class="outline-4">
+<h4 id="sec-4-3-2"><span class="section-number-4">4.3.2</span> new code </h4>
+<div class="outline-text-4" id="text-4-3-2">
+
+<p>in the new code, the user wraps the execution of #'main in a form which specifies which extensions are active in the current execution.  this requires a little more code, though it's not that much.
+</p>
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">with-active-layers</span> (cookies-poison-bunnies)
+  (main))
+</pre>
+
+
+<p>
+the user may specify multiple extensions at the same layer and can perform multiple executions with different active layers, something not very plausible with a hooks library.
+</p>
+
+
+
+<pre class="src src-lisp">(<span style="color: #728a05;">with-active-layers</span> (report-lifespan bunnies-can-fly Marxist-economy)
+  (format T <span style="color: #259185;">"~&amp;running a base case~&amp;"</span>)
+  (main)
+  (<span style="color: #728a05;">with-active-layers</span> (cookies-poison-bunnies)
+    (format T <span style="color: #259185;">"~&amp;and now we see what happens when bunnies die of cookies~&amp;"</span>)
+    (main)
+    (<span style="color: #728a05;">with-inactive-layers</span> (bunnies-can-fly)
+      (format T <span style="color: #259185;">"~&amp;and now we see what happens when bunnies can't fly, but die of eating cookies~&amp;"</span>))))
+</pre>
+
+
+<p>
+with-active-layers and with-inactive-layers can be nested at will and may contain any number of system extensions.  what's called extensions in this pattern, is called a layer in ContextL.
+</p>
+</div>
+
+</div>
+
+<div id="outline-container-4-3-3" class="outline-4">
+<h4 id="sec-4-3-3"><span class="section-number-4">4.3.3</span> conclusion </h4>
+<div class="outline-text-4" id="text-4-3-3">
+
+<p>from a user's point of view the system is slightly more complex, as there's a new macro called with-active-layers which has to be used.  there is some added flexibility..  as users normally need to learn how the hooks library works, the few seconds they need for typing with-active-layers is probably irrelevant.
+</p></div>
+</div>
+</div>
 </div>
 </div>
 
 <div id="postamble">
-<p class="date">Date: 2012-02-18 02:09:50 CET</p>
+<p class="date">Date: 2012-02-20 15:55:30 CET</p>
 <p class="author">Author: Aad Versteden</p>
 <p class="creator">Org version 7.7 with Emacs version 23</p>
 <a href="http://validator.w3.org/check?uri=referer">Validate XHTML 1.0</a>
